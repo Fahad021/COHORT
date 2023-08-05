@@ -11,7 +11,7 @@ class Controller():
         self.T = T
         self.RC_flag = RC_flag
         self.err_count = 0
-        
+
         if RC_flag:
         ## RC model: Simulation Study
             self.R = kwargs["R"]
@@ -32,10 +32,10 @@ class Controller():
             self.Pm = kwargs["Pm"]
             self.T_sp = 75
             self.Delta = 1.8
-            
+
         # Variable
         self.u = cp.Variable(T)
-        
+
         # Save u_i-u_bar from previous time step
         self.u_diff = cp.Parameter(T)
         self.v_bar = cp.Parameter(T)
@@ -43,12 +43,7 @@ class Controller():
         self.objective = cp.sum_squares(self.u-self.u_diff-self.v_bar+self.w_bar)
 
         ## Info needed for constraints
-        if RC_flag:
-            self.x0 = cp.Parameter()
-        else:
-            ## Expects [x_{t-p}, ..., x_t]
-            self.x0 = cp.Parameter(self.p)
-            
+        self.x0 = cp.Parameter() if RC_flag else cp.Parameter(self.p)
         # Set default value for constraints
         self.u_lower = cp.Parameter(T)
         self.u_lower.value = np.tile(0, T)
@@ -58,7 +53,7 @@ class Controller():
         self.x_lower.value = np.tile(self.T_sp-self.Delta, T)
         self.x_upper = cp.Parameter(T)
         self.x_upper.value = np.tile(self.T_sp+self.Delta, T)
-        
+
         # Set default value for exogenous variables
         self.d = cp.Parameter(T)
 
@@ -79,20 +74,20 @@ class Controller():
                 A[i+1, max(0, i+1-self.p):i+1] = -np.flip(self.ap)[-(i+1):]
             Lam = np.linalg.inv(A)
             #print(Lam)
-            
+
             lam = np.zeros((self.T, self.p))
             for i in range(self.p):
                 lam[i, i:] = np.flip(self.ap)[:self.p-i]
             #print(Lam.dot(lam))
-            
+
             ## note: missing the term on u_{t-1}
             B = np.zeros((self.T, self.T))
             for i in range(self.m):
                 B += np.diag(np.ones(T-i), -i)*self.bu[i]/self.Pm
             #print(B)
-            
+
             self.d.value = np.zeros(T)
-            
+
         # Constraints
         self.constraints = [-self.u <= -self.u_lower,
                             self.u <= self.u_upper]
@@ -114,14 +109,12 @@ class Controller():
         except:
             print("Solver failed")
             self.u.value = None
-            
-        ## Check solution valid
+
         if self.u.value is not None:
             return self.u.value, self.Problem.status
-        else:
-            u  = (self.x0.value-self.T_sp)/self.Delta
-            self.err_count += 1
-            return np.ones(self.T)*np.clip(u, 0, 1)*self.Pm, self.Problem.status
+        u  = (self.x0.value-self.T_sp)/self.Delta
+        self.err_count += 1
+        return np.ones(self.T)*np.clip(u, 0, 1)*self.Pm, self.Problem.status
     
     def updateState(self, x, u_lower = None, u_upper = None,
                     x_lower = None, x_upper = None,
@@ -161,8 +154,10 @@ class ControllerGroup():
         self.n_agent = len(parameters)
         self.T = T
         self.controller_list = []
-        for idx in range(self.n_agent):
-            self.controller_list.append(Controller(T = T, dt = dt, RC_flag = RC_flag, **parameters[idx]))
+        self.controller_list.extend(
+            Controller(T=T, dt=dt, RC_flag=RC_flag, **parameters[idx])
+            for idx in range(self.n_agent)
+        )
     
     def updateState(self, x_list, u_list = None, d_list = None, x_lower_list = None, x_upper_list = None):
         for idx, controller in enumerate(self.controller_list):
@@ -196,18 +191,17 @@ class Aggregator():
         self.N = n_agent
         self.rho = rho
         self.v_bar = cp.Variable(T)
-        
+
         self.u_bar = cp.Parameter(T)
         self.w_bar = cp.Parameter(T)
-        
+
         self.param_list = []
-        for item in param_shapes:
-            self.param_list.append(cp.Parameter(item))
+        self.param_list.extend(cp.Parameter(item) for item in param_shapes)
         #print(self.param_list)
-        
+
         # Objective:
         cost = g_func(self.N*self.v_bar, self.param_list)#
-        
+
         cost += self.N*self.rho/2*cp.sum_squares(self.u_bar-self.v_bar+self.w_bar)
         self.Problem = cp.Problem(cp.Minimize(cost))
 
@@ -228,10 +222,7 @@ def ADMM(controllers, aggregator, value_list, eps_primal, eps_dual, v_init = Non
     T = controllers.T
     rho = aggregator.rho
 
-    if v_init is not None:
-        v_bar = v_init
-    else:
-        v_bar = np.zeros(T)
+    v_bar = v_init if v_init is not None else np.zeros(T)
     w_bar = np.zeros(T)
 
     u_bar_prev = np.zeros(T)
@@ -248,7 +239,7 @@ def ADMM(controllers, aggregator, value_list, eps_primal, eps_dual, v_init = Non
         u_bar, u = controllers.u_update(v_bar, w_bar)
         v_bar = aggregator.v_update(u_bar, w_bar)
         w_bar += u_bar - v_bar
-        
+
         # For checking convergence
         r = u_bar - v_bar
         s = rho*(u_bar.reshape(1, -1)-u_bar_prev.reshape(1, -1)
@@ -256,7 +247,7 @@ def ADMM(controllers, aggregator, value_list, eps_primal, eps_dual, v_init = Non
         u_bar_prev = u_bar
         u_prev = u
         v_bar_prev = v_bar
-        
+
         n_iter+=1
         if (N*np.linalg.norm(r, 2)<eps_primal) & (sum(np.linalg.norm(s, 2, axis = 0))<eps_dual):
             converged = True

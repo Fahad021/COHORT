@@ -39,17 +39,11 @@ def getWeather(start_time = None, duration = 2):
     ForecastTime = now.strftime("%Y-%m-%d %H:%M")
 
     ''' Set the start date to either a specific day or a specific lag '''
-    if start_time is None:
-        a = datetime.datetime.today()
-    else:
-        a = start_time
+    a = datetime.datetime.now() if start_time is None else start_time
     numdays = duration# Set the number of days to pull in the future
 
     '''Set the Date array'''
-    dateList = []
-    for x in range (0, numdays):
-        dateList.append(a + datetime.timedelta(days = x)) # Can change the '+' to '-' to pull historical
-    
+    dateList = [a + datetime.timedelta(days = x) for x in range (0, numdays)]
     '''Loop through the locations and dates'''
     temps = []
 

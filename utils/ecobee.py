@@ -17,10 +17,7 @@ def Dict2Str(dictionary):
     for key, value in dictionary.items():
         string+=key
         string+=":"
-        if type(value)==dict:
-            string+=Dict2Str(value)
-        else:
-            string+=value
+        string += Dict2Str(value) if type(value)==dict else value
         string+=','
     return string[:-1]+"}"
 
@@ -42,17 +39,17 @@ class Ecobee():
         params = {"grant_type":"refresh_token", 
                   "code":self.refresh_token,
                   "client_id":self.apiKey}
-        r = requests.post(self.url+"token", params=params) 
+        r = requests.post(f"{self.url}token", params=params)
         data = r.json()
-        
+
         if r.status_code == requests.codes.ok:
             self.access_token = data["access_token"]
             self.refresh_token = data["refresh_token"]
-            self.headers = {'Authorization': 'Bearer '+self.access_token}
-            
+            self.headers = {'Authorization': f'Bearer {self.access_token}'}
+
             self.info['refresh_token'] = self.refresh_token
             saveAsJson(self.file, self.info)
-            
+
             self.valid_until = datetime.datetime.now() + datetime.timedelta(minutes = 45)
         else:
             r.raise_for_status()
@@ -69,14 +66,13 @@ class Ecobee():
                      #'"includeSettings"':"true"
                     }}
         params = {'format' : 'json', 'body': Dict2Str(bodyDict)}
-        
-        r = requests.get(self.url+"1/thermostat", headers = self.headers, params = params)
+
+        r = requests.get(
+            f"{self.url}1/thermostat", headers=self.headers, params=params
+        )
         data = r.json()
-        
-        if r.status_code == requests.codes.ok:    
-            #print(data)
-            pass
-        else:
+
+        if r.status_code != requests.codes.ok:
             r.raise_for_status()
         return data['thermostatList'][0]
     
@@ -85,7 +81,7 @@ class Ecobee():
     def getHistorical(self, start_time, end_time): #, variables
         if datetime.datetime.now() > self.valid_until:
             self.refreshToken()
-        
+
         bodyDict = {
             '"startDate"':start_time.strftime("%Y-%m-%d"),
             '"endDate"':end_time.strftime("%Y-%m-%d"),
@@ -95,12 +91,12 @@ class Ecobee():
              '"selectionMatch"':'"521788610260"'}
         }
         params = {'format' : 'json', 'body': Dict2Str(bodyDict)}
-        r = requests.get(self.url+"1/runtimeReport", headers = self.headers,  params = params)
+        r = requests.get(
+            f"{self.url}1/runtimeReport", headers=self.headers, params=params
+        )
         #print(r.url)
         data = r.json()
-        if r.status_code == requests.codes.ok:    
-            pass
-        else:
+        if r.status_code != requests.codes.ok:
             r.raise_for_status()
         return data
         
@@ -124,8 +120,12 @@ class Ecobee():
               }
             }
           ]
-        }     
-        r = requests.post(self.url+"1/thermostat?format=json", headers = self.headers, json = dataDict)
+        }
+        r = requests.post(
+            f"{self.url}1/thermostat?format=json",
+            headers=self.headers,
+            json=dataDict,
+        )
         if r.status_code == requests.codes.ok: 
             print("Success")
         else:

@@ -17,7 +17,11 @@ def plot_prediction(df, predictions, ax, state_name = "T_ctrl", start_day = None
     ax.plot(df.index.to_pydatetime(), df[state_name], 'k')
     for hour in hours:
         idx = df.index[hour*step_per_hour:].to_pydatetime()
-        ax.plot(idx[:len(predictions[hour])], predictions[hour][:len(idx)], label = "{}-hour ahead".format(hour))
+        ax.plot(
+            idx[: len(predictions[hour])],
+            predictions[hour][: len(idx)],
+            label=f"{hour}-hour ahead",
+        )
     ax.legend()
 
     if start_day is None:
